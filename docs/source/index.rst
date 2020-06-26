@@ -48,11 +48,11 @@ PyTorch-Lightning-Bolts documentation
    :name: models
    :caption: Models
 
-   models
    autoencoders
    classic_ml
+   convolutional
    gans
-   rl
+   reinforce_learn
    self_supervised_models
 
 .. toctree::
@@ -61,6 +61,8 @@ PyTorch-Lightning-Bolts documentation
    :caption: Data Processing
 
    transforms
+   self_supervised_utils
+   semi_sup_processing
 
 .. toctree::
    :maxdepth: 2
