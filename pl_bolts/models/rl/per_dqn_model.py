@@ -93,7 +93,7 @@ It is important to note that loss is not the only metric we should be looking at
  low loss during training, it may still perform poorly due to lack of exploration.
 
 
-![Noisy DQN Comparison](../../docs/images/pong_per_dqn_baseline_v1_results_comp.png)
+![Noisy DQN Comparison](../../../docs/images/rl_benchmark_results/pong_per_dqn_baseline_v1_results_comp.png)
 
  - Orange: DQN
  - Pink: PER DQN

@@ -69,7 +69,7 @@ Results
 Double DQN Results
 ^^^^^^^^^^^^^^^^^^
 
-![Double DQN Results](../../docs/images/pong_double_dqn_baseline_results.png)
+![Double DQN Results]../../../docs/images/rl_benchmark_results/pong_double_dqn_baseline_results.png)
 
 DQN vs Double DQN
 ^^^^^^^^^^^^^^^^^
@@ -78,7 +78,7 @@ orange: DQN
 
 blue: Double DQN
 
-![Double DQN Results](../../docs/images/dqn_ddqn_comparison.png)
+![Double DQN Results]../../../docs/images/rl_benchmark_results/dqn_ddqn_comparison.png)
 
 References
 ----------

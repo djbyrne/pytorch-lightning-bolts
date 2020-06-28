@@ -40,7 +40,7 @@ Implementation
 Results
 -------
 
-![DQN Basline Results](../../docs/images/pong_dqn_baseline_results.png)
+![DQN Basline Results](../../../docs/images/rl_benchmark_results/pong_dqn_baseline_results.png)
 
 References
 ----------

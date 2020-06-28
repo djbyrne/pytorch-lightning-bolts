@@ -135,7 +135,7 @@ The N-Step DQN shows the greatest increase in performance with respect to the ot
 After less than 150k steps the agent begins to consistently win games and achieves the top score after ~170K steps.
 This is reflected in the sharp peak of the total episode steps and of course, the total episode rewards.
 
-![N-Step DQN Baseline Results](../../docs/images/pong_nstep_dqn_1.png)
+![N-Step DQN Baseline Results](../../../docs/images/rl_benchmark_results/pong_nstep_dqn_1.png)
 
 DQN vs N-Step DQN
 ^^^^^^^^^^^^^^^^^
@@ -147,7 +147,7 @@ its expected reward off approximations of the future states. The large the size 
 Previous literature, listed below, shows the best results for the Pong environment with an N step between 3-5.
 For these experiments I opted with an N step of 4.
 
-![N-Step DQN Baseline Results vs DQN Baseline Results](../../docs/images/pong_nstep_dqn_2.png)
+![N-Step DQN Baseline Results vs DQN Baseline Results](../../../docs/images/rl_benchmark_results/pong_nstep_dqn_2.png)
 
 References
 ----------

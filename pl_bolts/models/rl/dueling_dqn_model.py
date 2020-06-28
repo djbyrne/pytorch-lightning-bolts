@@ -98,7 +98,7 @@ where the agent goes from losing to winning.
 As you can see by the total rewards, the dueling network's training progression is very stable and continues to trend
 upward until it finally plateus.
 
-![Dueling DQN Results](../../docs/images/pong_dueling_dqn_results.png)
+![Dueling DQN Results](../../../docs/images/rl_benchmark_results/pong_dueling_dqn_results.png)
 
 DQN vs Dueling DQN
 ^^^^^^^^^^^^^^^^^^
@@ -112,7 +112,7 @@ This could very well be due to the simplicity of the Pong environment.
  - Orange: DQN
  - Red: Dueling DQN
 
-![Dueling DQN Results](../../docs/images/pong_dueling_dqn_comparison.png)
+![Dueling DQN Results]{../../../docs/images/rl_benchmark_results/pong_dueling_dqn_comparison.png)
 
 
 """

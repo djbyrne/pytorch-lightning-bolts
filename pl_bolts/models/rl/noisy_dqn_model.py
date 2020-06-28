@@ -123,7 +123,7 @@ Noisy DQN baseline
 Similar to the other improvements, the average score of the agent reaches positive numbers around the 250k mark and
 steadily increases till convergence.
 
-![Noisy DQN Results](../../docs/images/pong_noisy_dqn_results.png)
+![Noisy DQN Results](../../../docs/images/rl_benchmark_results/pong_noisy_dqn_results.png)
 
 DQN vs Dueling DQN
 ^^^^^^^^^^^^^^^^^^
@@ -135,7 +135,7 @@ form of exploration.
 - Orange: DQN
 - Red: Noisy DQN
 
-![Noisy DQN Comparison](../../docs/images/pong_noisy_dqn_comparison.png)
+![Noisy DQN Comparison](../../../docs/images/rl_benchmark_results/pong_noisy_dqn_comparison.png)
 
 
 """
