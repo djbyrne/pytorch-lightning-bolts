@@ -38,7 +38,7 @@ Original implementation by: `Donal Byrne <https://github.com/djbyrne>`_
 
 Example::
 
-    from pl_bolts.models.rl import DQN
+    from pl_bolts.models.rl.dqn_model import DQN
     dqn = DQN("PongNoFrameskip-v4")
     trainer = Trainer()
     trainer.fit(dqn)
@@ -55,7 +55,7 @@ Original implementation by: `Donal Byrne <https://github.com/djbyrne>`_
 
 Example::
 
-    from pl_bolts.models.rl import DoubleDQN
+    from pl_bolts.models.rl.double_dqn_model import DoubleDQN
     ddqn = DoubleDQN("PongNoFrameskip-v4")
     trainer = Trainer()
     trainer.fit(ddqn)
