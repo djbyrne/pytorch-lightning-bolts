@@ -127,7 +127,9 @@ class PolicyAgent(Agent):
             states = states.cuda(device)
 
         # get the logits and pass through softmax for probability distribution
-        probabilities = F.softmax(self.net(states))
+        # probabilities = F.softmax(self.net(states))
+        logits, _ = self.net(states)
+        probabilities = F.softmax(logits)
         prob_np = probabilities.data.cpu().numpy()
 
         # take the numpy values and randomly select action based on prob distribution

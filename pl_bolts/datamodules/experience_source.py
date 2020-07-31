@@ -275,7 +275,8 @@ class DiscountedExperienceSource(ExperienceSource):
             last_exp_state = experiences[-1].new_state
             tail_experiences = experiences
         else:
-            last_exp_state = experiences[-1].state
+            # last_exp_state = experiences[-1].state
+            last_exp_state = experiences[-1].new_state
             tail_experiences = experiences[:-1]
         return last_exp_state, tail_experiences
 
