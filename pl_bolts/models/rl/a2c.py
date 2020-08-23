@@ -101,7 +101,7 @@ class A2C(pl.LightningModule):
         # Hyperparameters
         self.lr = 0.001
         self.batch_size = 32 # this is scaled to the number of environments
-        self.batches_per_epoch = self.batch_size * epoch_len
+        self.batches_per_epoch = 200
         self.entropy_beta = entropy_beta
         self.gamma = gamma
         self.n_steps = 5
@@ -134,6 +134,7 @@ class A2C(pl.LightningModule):
         self.batch_actions = []
 
         self.episode_rewards = 0
+        self.batches = 0
 
         self.state = self.envs_pool.reset()
 
@@ -177,9 +178,9 @@ class A2C(pl.LightningModule):
             batch_rewards = []
             rewards = []
             masks = []
-            self.frame_idx = 0
+            frame_idx = 0
 
-            while self.frame_idx < self.batch_size:
+            while frame_idx < self.batch_size:
 
                 for _ in range(self.n_steps):
                     state = torch.FloatTensor(self.state).to(self.device)
@@ -200,15 +201,23 @@ class A2C(pl.LightningModule):
                     masks.append(1-done)
 
                     self.state = next_state
-                    self.total_steps += 1
-                    self.frame_idx += 1
+                    frame_idx += 1
 
-                    if self.frame_idx >= self.batch_size:
+
+                    if frame_idx >= self.batch_size:
                         break
+
+                    self.total_steps += 1
+
+            self.batches += 1
 
             for idx in range(len(batch_actions)):
                 batch_rewards.extend(self.compute_returns(rewards, masks))
                 yield batch_states[idx], batch_actions[idx], batch_rewards[idx]
+
+            if self.batches >= self.batches_per_epoch:
+                self.batches = 0
+                break
 
     @staticmethod
     def compute_returns(rewards, masks, gamma=0.99):
@@ -256,6 +265,7 @@ class A2C(pl.LightningModule):
 
         log = {
             "reward": self.total_rewards[-1],
+            "batches": self.batches,
             "avg_reward": avg_rewards,
             "actor_loss": actor_loss,
             "critic_loss": critic_loss
