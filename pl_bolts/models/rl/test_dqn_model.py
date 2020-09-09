@@ -126,18 +126,17 @@ class DQN(pl.LightningModule):
         self.episode_reward = 0
         self.episode_count = 0
         self.episode_steps = [0]
-        self.total_episode_steps = 0
+        self.total_episode_steps = [0]
 
         self.total_rewards = [0]
         self.done_episodes = 0
 
         self.avg_reward_len = avg_reward_len
 
-        self.reward_list = []
-        for _ in range(avg_reward_len):
-            self.reward_list.append(
-                torch.tensor(min_episode_reward, device=self.device)
-            )
+        # for _ in range(avg_reward_len):
+        #     self.total_rewards.append(
+        #         torch.tensor(min_episode_reward, device=self.device)
+        #     )
         self.avg_rewards = 0
 
         self.state = self.env.reset()
@@ -153,6 +152,7 @@ class DQN(pl.LightningModule):
     #             next_state, reward, done, _ = self.env.step(action)
     #             exp = Experience(state=self.state, action=action, reward=reward, done=done, new_state=next_state)
     #             self.buffer.append(exp)
+
     def populate(self, warm_start: int) -> None:
         """Populates the buffer with initial experience"""
         if warm_start > 0:
@@ -185,25 +185,35 @@ class DQN(pl.LightningModule):
         Returns:
             yields a Experience tuple containing the state, action, reward, done and next_state.
         """
-        for step_idx, exp in enumerate(self.source.runner(self.device)):
+        episode_reward = 0
+        episode_steps = 0
+
+        while True:
+            action = self.agent(self.state, self.device)
+
+            next_state, r, is_done, _ = self.env.step(action[0])
+
+            episode_reward += r
+            episode_steps += 1
+
+            exp = Experience(state=self.state, action=action[0], reward=r, done=is_done, new_state=next_state)
 
             self.agent.update_epsilon(self.global_step)
             self.buffer.append(exp)
+            self.state = next_state
 
-            episode_reward_steps = self.source.pop_rewards_steps()
+            if is_done:
+                self.done_episodes += 1
+                self.total_rewards.append(episode_reward)
+                self.total_episode_steps.append(episode_steps)
+                self.avg_rewards = float(
+                    np.mean(self.total_rewards[-self.avg_reward_len:])
+                )
+                self.state = self.env.reset()
+                episode_steps = 0
+                episode_reward = 0
 
-            if episode_reward_steps:
-                for reward, steps in episode_reward_steps:
-                    self.done_episodes += 1
-                    self.total_rewards.append(reward)
-                    self.episode_steps.append(steps)
-                    self.avg_rewards = float(
-                        np.mean(self.total_rewards[-self.avg_reward_len:])
-                    )
-
-            states, actions, rewards, dones, new_states = self.buffer.sample(
-                self.batch_size
-            )
+            states, actions, rewards, dones, new_states = self.buffer.sample(self.batch_size)
 
             for idx, _ in enumerate(dones):
                 yield states[idx], actions[idx], rewards[idx], dones[idx], new_states[idx]
