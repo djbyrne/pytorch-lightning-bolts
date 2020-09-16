@@ -11,13 +11,13 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.optim as optim
+from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 
 from pl_bolts.datamodules.experience_source import (
     ExperienceSourceDataset,
-    DiscountedExperienceSource, Experience,
-)
+    Experience)
 from pl_bolts.losses.rl import dqn_loss
 from pl_bolts.models.rl.common import wrappers, cli
 from pl_bolts.models.rl.common.agents import ValueAgent
@@ -42,7 +42,6 @@ class DQN(pl.LightningModule):
         warm_start_size: int = 10000,
         avg_reward_len: int = 100,
         min_episode_reward: int = -21,
-        n_steps: int = 1,
         seed: int = 123,
         num_envs: int = 1,
         **kwargs,
@@ -55,6 +54,14 @@ class DQN(pl.LightningModule):
 
             - `Donal Byrne <https://github.com/djbyrne>`
 
+        Example:
+            >>> from pl_bolts.models.rl.dqn_model import DQN
+            ...
+            >>> model = DQN("PongNoFrameskip-v4")
+
+        Train::
+            trainer = Trainer()
+            trainer.fit(model)
 
         Args:
             env: gym environment tag
@@ -87,13 +94,13 @@ class DQN(pl.LightningModule):
         # Environment
         self.exp = None
         self.env = self.make_environment(env, seed)
+        self.test_env = self.make_environment(env)
 
         self.obs_shape = self.env.observation_space.shape
         self.n_actions = self.env.action_space.n
 
         # Model Attributes
         self.buffer = None
-        self.source = None
         self.dataset = None
 
         self.net = None
@@ -107,7 +114,6 @@ class DQN(pl.LightningModule):
             eps_end=eps_end,
             eps_frames=eps_last_frame,
         )
-        self.source = DiscountedExperienceSource(self.env, self.agent, n_steps=n_steps)
 
         # Hyperparameters
         self.num_envs = num_envs
@@ -117,49 +123,72 @@ class DQN(pl.LightningModule):
         self.batch_size = batch_size * num_envs
         self.replay_size = replay_size
         self.warm_start_size = warm_start_size
-        self.n_steps = n_steps
 
         self.save_hyperparameters()
 
         # Metrics
-        self.total_reward = 0
-        self.episode_reward = 0
-        self.episode_count = 0
-        self.episode_steps = [0]
-        self.total_episode_steps = 0
-
+        self.total_episode_steps = [0]
         self.total_rewards = [0]
         self.done_episodes = 0
+        self.total_steps = 0
+        self.batches_per_epoch = 10000
 
+        # Average Rewards
         self.avg_reward_len = avg_reward_len
 
-        self.reward_list = []
         for _ in range(avg_reward_len):
-            self.reward_list.append(
+            self.total_rewards.append(
                 torch.tensor(min_episode_reward, device=self.device)
             )
-        self.avg_rewards = 0
+
+        self.avg_rewards = float(
+            np.mean(self.total_rewards[-self.avg_reward_len:])
+        )
 
         self.state = self.env.reset()
 
-    # def populate(self, warm_start: int) -> None:
-    #     """Populates the buffer with initial experience"""
-    #     if warm_start > 0:
-    #         self.state = self.env.reset()
-    #
-    #         for _ in range(warm_start):
-    #             self.agent.epsilon = 1.0
-    #             action = self.agent(self.state, self.device)
-    #             next_state, reward, done, _ = self.env.step(action)
-    #             exp = Experience(state=self.state, action=action, reward=reward, done=done, new_state=next_state)
-    #             self.buffer.append(exp)
+    def run_n_episodes(self, env, n_epsiodes: int = 1, epsilon: float = 1.0) -> List[int]:
+        """
+        Carries out N episodes of the environment with the current agent
+
+        Args:
+            env: environment to use, either train environment or test environment
+            n_epsiodes: number of episodes to run
+            epsilon: epsilon value for DQN agent
+        """
+        total_rewards = []
+
+        for _ in range(n_epsiodes):
+            episode_state = env.reset()
+            done = False
+            episode_reward = 0
+
+            while not done:
+                self.agent.epsilon = epsilon
+                action = self.agent(episode_state, self.device)
+                next_state, reward, done, _ = self.env.step(action[0])
+                episode_state = next_state
+                episode_reward += reward
+
+            total_rewards.append(episode_reward)
+
+        return total_rewards
+
     def populate(self, warm_start: int) -> None:
         """Populates the buffer with initial experience"""
         if warm_start > 0:
+            self.state = self.env.reset()
+
             for _ in range(warm_start):
-                self.source.agent.epsilon = 1.0
-                exp = next(self.source.runner(self.device))
+                self.agent.epsilon = 1.0
+                action = self.agent(self.state, self.device)
+                next_state, reward, done, _ = self.env.step(action[0])
+                exp = Experience(state=self.state, action=action[0], reward=reward, done=done, new_state=next_state)
                 self.buffer.append(exp)
+                self.state = next_state
+
+                if done:
+                    self.state = self.env.reset()
 
     def build_networks(self) -> None:
         """Initializes the DQN train and target networks"""
@@ -185,61 +214,43 @@ class DQN(pl.LightningModule):
         Returns:
             yields a Experience tuple containing the state, action, reward, done and next_state.
         """
-        for step_idx, exp in enumerate(self.source.runner(self.device)):
+        episode_reward = 0
+        episode_steps = 0
+
+        while True:
+            self.total_steps += 1
+            action = self.agent(self.state, self.device)
+
+            next_state, r, is_done, _ = self.env.step(action[0])
+
+            episode_reward += r
+            episode_steps += 1
+
+            exp = Experience(state=self.state, action=action[0], reward=r, done=is_done, new_state=next_state)
 
             self.agent.update_epsilon(self.global_step)
             self.buffer.append(exp)
+            self.state = next_state
 
-            episode_reward_steps = self.source.pop_rewards_steps()
+            if is_done:
+                self.done_episodes += 1
+                self.total_rewards.append(episode_reward)
+                self.total_episode_steps.append(episode_steps)
+                self.avg_rewards = float(
+                    np.mean(self.total_rewards[-self.avg_reward_len:])
+                )
+                self.state = self.env.reset()
+                episode_steps = 0
+                episode_reward = 0
 
-            if episode_reward_steps:
-                for reward, steps in episode_reward_steps:
-                    self.done_episodes += 1
-                    self.total_rewards.append(reward)
-                    self.episode_steps.append(steps)
-                    self.avg_rewards = float(
-                        np.mean(self.total_rewards[-self.avg_reward_len:])
-                    )
-
-            states, actions, rewards, dones, new_states = self.buffer.sample(
-                self.batch_size
-            )
+            states, actions, rewards, dones, new_states = self.buffer.sample(self.batch_size)
 
             for idx, _ in enumerate(dones):
                 yield states[idx], actions[idx], rewards[idx], dones[idx], new_states[idx]
 
-        # while True:
-        #     action = self.agent(self.state, self.device)
-        #
-        #     next_state, reward, done, _ = self.env.step(action)
-        #     exp = Experience(state=self.state, action=action, reward=reward, done=done, new_state=next_state)
-        #
-        #     self.agent.update_epsilon(self.global_step)
-        #     self.buffer.append(exp)
-        #
-        #     self.state = next_state
-        #     self.episode_steps += 1
-        #     self.episode_reward += reward
-        #
-        #     if done:
-        #         self.done_episodes += 1
-        #         self.total_rewards.append(self.episode_reward)
-        #         self.total_episode_steps = self.episode_steps
-        #         self.avg_rewards = float(
-        #             np.mean(self.total_rewards[-self.avg_reward_len:])
-        #         )
-        #         self.episode_reward = 0
-        #         self.episode_steps = 0
-        #         self.state = self.env.reset()
-        #
-        #     states, actions, rewards, dones, new_states = self.buffer.sample(
-        #             self.batch_size
-        #         )
-        #
-        #     for idx, _ in enumerate(dones):
-        #         yield states[idx], actions[idx], rewards[idx], dones[idx], new_states[
-        #             idx
-        #         ]
+            # Simulates epochs
+            if self.total_steps % self.batches_per_epoch == 0:
+                break
 
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], _) -> OrderedDict:
         """
@@ -267,12 +278,14 @@ class DQN(pl.LightningModule):
             "avg_reward": self.avg_rewards,
             "train_loss": loss,
             "episodes": self.done_episodes,
+            "episode_steps": self.total_episode_steps[-1]
         }
         status = {
             "steps": self.global_step,
             "avg_reward": self.avg_rewards,
             "total_reward": self.total_rewards[-1],
             "episodes": self.done_episodes,
+            "episode_steps": self.total_episode_steps[-1],
             "epsilon": self.agent.epsilon,
         }
 
@@ -285,12 +298,28 @@ class DQN(pl.LightningModule):
             }
         )
 
+    def validation_step(self, *args, **kwargs) -> Dict[str, torch.Tensor]:
+        """Evaluate the agent for 10 episodes"""
+        test_reward = self.run_n_episodes(self.test_env, 10, 0)
+        return {"test_reward": test_reward}
+
+    def validation_end(self, *args, **kwargs) -> Dict[str, torch.Tensor]:
+        """Evaluate the agent for 10 episodes"""
+        test_reward = self.run_n_episodes(self.test_env, 10, 0)
+        return {"test_reward": test_reward}
+
+    def test_epoch_end(self, outputs) -> Dict[str, torch.Tensor]:
+        """Log the avg of the test results"""
+        rewards = [x["test_reward"] for x in outputs]
+        avg_reward = sum(rewards) / len(rewards)
+        tensorboard_logs = {"avg_test_reward": avg_reward}
+        return {"avg_test_reward": avg_reward, "log": tensorboard_logs}
+
     def test_step(self, *args, **kwargs) -> Dict[str, torch.Tensor]:
         """Evaluate the agent for 10 episodes"""
-        self.agent.epsilon = 0.0
-        test_reward = self.source.run_episode()
-
-        return {"test_reward": test_reward}
+        test_reward = self.run_n_episodes(self.test_env, 1, 0)
+        avg_reward = sum(test_reward) / len(test_reward)
+        return {"test_reward": avg_reward}
 
     def test_epoch_end(self, outputs) -> Dict[str, torch.Tensor]:
         """Log the avg of the test results"""
@@ -316,12 +345,16 @@ class DQN(pl.LightningModule):
         """Get train loader"""
         return self._dataloader()
 
+    def val_dataloader(self) -> DataLoader:
+        """Get train loader"""
+        return self._dataloader()
+
     def test_dataloader(self) -> DataLoader:
         """Get test loader"""
-        return DataLoader(dataset=self.dataset, batch_size=self.batch_size)
+        return self._dataloader()
 
     @staticmethod
-    def make_environment(env_name: str, seed: int) -> gym.Env:
+    def make_environment(env_name: str, seed: int = None) -> gym.Env:
         """
         Initialise gym  environment
 
@@ -333,7 +366,10 @@ class DQN(pl.LightningModule):
             gym environment
         """
         env = wrappers.make_environment(env_name)
-        env.seed(seed)
+
+        if seed:
+            env.seed(seed)
+
         return env
 
     @staticmethod
@@ -380,8 +416,7 @@ class DQN(pl.LightningModule):
         return arg_parser
 
 
-# todo: covert to CLI func and add test
-if __name__ == '__main__':
+def cli_main():
     parser = argparse.ArgumentParser(add_help=False)
 
     # trainer args
@@ -394,5 +429,19 @@ if __name__ == '__main__':
 
     model = DQN(**args.__dict__)
 
-    trainer = pl.Trainer.from_argparse_args(args)
-    trainer.fit(model)
+    # save checkpoints based on avg_reward
+    checkpoint_callback = ModelCheckpoint(
+        save_top_k=1, monitor="avg_reward", mode="max", period=1, verbose=True
+    )
+
+    # seed_everything(123)
+    trainer = pl.Trainer.from_argparse_args(
+        args, deterministic=True, checkpoint_callback=checkpoint_callback, limit_test_batches=10,
+        resume_from_checkpoint="/tmp/pycharm_project_857/pl_bolts/models/rl/lightning_logs/version_64/checkpoints/epoch=59.ckpt")
+
+    # trainer.fit(model)
+    trainer.test(model)
+
+
+if __name__ == '__main__':
+    cli_main()

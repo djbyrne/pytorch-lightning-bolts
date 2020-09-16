@@ -60,29 +60,34 @@ class PERDQN(DQN):
             yields a Experience tuple containing the state, action, reward, done and next_state.
         """
 
+        episode_reward = 0
+        episode_steps = 0
+
         while True:
+            self.total_steps += 1
             action = self.agent(self.state, self.device)
 
-            next_state, reward, done, _ = self.env.step(action)
-            exp = Experience(state=self.state, action=action, reward=reward, done=done, new_state=next_state)
+            next_state, r, is_done, _ = self.env.step(action[0])
+
+            episode_reward += r
+            episode_steps += 1
+
+            exp = Experience(state=self.state, action=action[0], reward=r, done=is_done, new_state=next_state)
 
             self.agent.update_epsilon(self.global_step)
             self.buffer.append(exp)
-
             self.state = next_state
-            self.episode_steps += 1
-            self.episode_reward += reward
 
-            if done:
+            if is_done:
                 self.done_episodes += 1
-                self.total_rewards.append(self.episode_reward)
-                self.total_episode_steps = self.episode_steps
+                self.total_rewards.append(episode_reward)
+                self.total_episode_steps.append(episode_steps)
                 self.avg_rewards = float(
                     np.mean(self.total_rewards[-self.avg_reward_len:])
                 )
-                self.episode_reward = 0
-                self.episode_steps = 0
                 self.state = self.env.reset()
+                episode_steps = 0
+                episode_reward = 0
 
             samples, indices, weights = self.buffer.sample(self.batch_size)
 

@@ -141,25 +141,21 @@ class DQN(pl.LightningModule):
 
         self.state = self.env.reset()
 
-    # def populate(self, warm_start: int) -> None:
-    #     """Populates the buffer with initial experience"""
-    #     if warm_start > 0:
-    #         self.state = self.env.reset()
-    #
-    #         for _ in range(warm_start):
-    #             self.agent.epsilon = 1.0
-    #             action = self.agent(self.state, self.device)
-    #             next_state, reward, done, _ = self.env.step(action)
-    #             exp = Experience(state=self.state, action=action, reward=reward, done=done, new_state=next_state)
-    #             self.buffer.append(exp)
-
     def populate(self, warm_start: int) -> None:
         """Populates the buffer with initial experience"""
         if warm_start > 0:
+            self.state = self.env.reset()
+
             for _ in range(warm_start):
-                self.source.agent.epsilon = 1.0
-                exp = next(self.source.runner(self.device))
+                self.agent.epsilon = 1.0
+                action = self.agent(self.state, self.device)
+                next_state, reward, done, _ = self.env.step(action[0])
+                exp = Experience(state=self.state, action=action[0], reward=reward, done=done, new_state=next_state)
                 self.buffer.append(exp)
+                self.state = next_state
+
+                if done:
+                    self.state = self.env.reset()
 
     def build_networks(self) -> None:
         """Initializes the DQN train and target networks"""

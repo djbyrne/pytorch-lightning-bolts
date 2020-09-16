@@ -111,8 +111,10 @@ def per_dqn_loss(batch: Tuple[torch.Tensor, torch.Tensor], batch_weights: List, 
 
     batch_weights = torch.tensor(batch_weights)
 
+    # state_action_vals = net(states).gather(1, actions)
+    # state_action_vals = state_action_vals.squeeze(-1)
     state_action_vals = net(states).gather(1, actions)
-    state_action_vals = state_action_vals.squeeze(-1)
+
     with torch.no_grad():
         next_s_vals = target_net(next_states).max(1)[0]
         next_s_vals[dones] = 0.0
