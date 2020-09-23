@@ -11,6 +11,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.optim as optim
+from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
@@ -43,7 +44,7 @@ class DQN(pl.LightningModule):
         avg_reward_len: int = 100,
         min_episode_reward: int = -21,
         seed: int = 123,
-        num_envs: int = 1,
+        batches_per_epoch: int = 1000,
         **kwargs,
     ):
         """
@@ -79,7 +80,7 @@ class DQN(pl.LightningModule):
             min_episode_reward: the minimum score that can be achieved in an episode. Used for filling the avg buffer
                 before training begins
             seed: seed value for all RNG used
-            num_envs: number of environments to run the agent in at once
+            batches_per_epoch: number of batches per epoch
 
         Note:
             This example is based on:
@@ -116,13 +117,13 @@ class DQN(pl.LightningModule):
         )
 
         # Hyperparameters
-        self.num_envs = num_envs
         self.sync_rate = sync_rate
         self.gamma = gamma
         self.lr = learning_rate
-        self.batch_size = batch_size * num_envs
+        self.batch_size = batch_size
         self.replay_size = replay_size
         self.warm_start_size = warm_start_size
+        self.batches_per_epoch = batches_per_epoch
 
         self.save_hyperparameters()
 
@@ -131,7 +132,6 @@ class DQN(pl.LightningModule):
         self.total_rewards = [0]
         self.done_episodes = 0
         self.total_steps = 0
-        self.batches_per_epoch = 10000
 
         # Average Rewards
         self.avg_reward_len = avg_reward_len
@@ -298,16 +298,6 @@ class DQN(pl.LightningModule):
             }
         )
 
-    def validation_step(self, *args, **kwargs) -> Dict[str, torch.Tensor]:
-        """Evaluate the agent for 10 episodes"""
-        test_reward = self.run_n_episodes(self.test_env, 10, 0)
-        return {"test_reward": test_reward}
-
-    def validation_end(self, *args, **kwargs) -> Dict[str, torch.Tensor]:
-        """Evaluate the agent for 10 episodes"""
-        test_reward = self.run_n_episodes(self.test_env, 10, 0)
-        return {"test_reward": test_reward}
-
     def test_epoch_end(self, outputs) -> Dict[str, torch.Tensor]:
         """Log the avg of the test results"""
         rewards = [x["test_reward"] for x in outputs]
@@ -342,10 +332,6 @@ class DQN(pl.LightningModule):
         return DataLoader(dataset=self.dataset, batch_size=self.batch_size)
 
     def train_dataloader(self) -> DataLoader:
-        """Get train loader"""
-        return self._dataloader()
-
-    def val_dataloader(self) -> DataLoader:
         """Get train loader"""
         return self._dataloader()
 
@@ -412,6 +398,29 @@ class DQN(pl.LightningModule):
         arg_parser.add_argument(
             "--eps_end", type=float, default=0.02, help="final value of epsilon"
         )
+        arg_parser.add_argument(
+            "--batches_per_epoch", type=int, default=10000, help="number of batches in an epoch"
+        )
+        arg_parser.add_argument(
+            "--batch_size", type=int, default=32, help="size of the batches"
+        )
+        arg_parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+
+        arg_parser.add_argument(
+            "--env", type=str, required=True, help="gym environment tag"
+        )
+        arg_parser.add_argument("--gamma", type=float, default=0.99, help="discount factor")
+
+        arg_parser.add_argument(
+            "--seed", type=int, default=123, help="seed for training run"
+        )
+
+        arg_parser.add_argument(
+            "--avg_reward_len",
+            type=int,
+            default=100,
+            help="how many episodes to include in avg reward",
+        )
 
         return arg_parser
 
@@ -423,7 +432,6 @@ def cli_main():
     parser = pl.Trainer.add_argparse_args(parser)
 
     # model args
-    parser = cli.add_base_args(parser)
     parser = DQN.add_model_specific_args(parser)
     args = parser.parse_args()
 
@@ -434,13 +442,11 @@ def cli_main():
         save_top_k=1, monitor="avg_reward", mode="max", period=1, verbose=True
     )
 
-    # seed_everything(123)
+    seed_everything(123)
     trainer = pl.Trainer.from_argparse_args(
-        args, deterministic=True, checkpoint_callback=checkpoint_callback, limit_test_batches=10,
-        resume_from_checkpoint="/tmp/pycharm_project_857/pl_bolts/models/rl/lightning_logs/version_64/checkpoints/epoch=59.ckpt")
+        args, deterministic=True, checkpoint_callback=checkpoint_callback)
 
-    # trainer.fit(model)
-    trainer.test(model)
+    trainer.fit(model)
 
 
 if __name__ == '__main__':

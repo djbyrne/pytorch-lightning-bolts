@@ -20,11 +20,7 @@ class DuelingDQN(DQN):
 
             - `Donal Byrne <https://github.com/djbyrne>`
 
-        Example:
 
-            >>> from pl_bolts.models.rl.dueling_dqn_model import DuelingDQN
-            ...
-            >>> model = DuelingDQN("PongNoFrameskip-v4")
 
         Train::
 
@@ -64,7 +60,6 @@ if __name__ == '__main__':
     parser = pl.Trainer.add_argparse_args(parser)
 
     # model args
-    parser = cli.add_base_args(parser)
     parser = DuelingDQN.add_model_specific_args(parser)
     args = parser.parse_args()
 

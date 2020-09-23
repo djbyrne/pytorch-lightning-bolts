@@ -94,14 +94,12 @@ def per_dqn_loss(batch: Tuple[torch.Tensor, torch.Tensor], batch_weights: List, 
                  target_net: nn.Module, gamma: float = 0.99) -> Tuple[torch.Tensor, np.ndarray]:
     """
     Calculates the mse loss with the priority weights of the batch from the PER buffer
-
     Args:
         batch: current mini batch of replay data
         batch_weights: how each of these samples are weighted in terms of priority
         net: main training network
         target_net: target network of the main training network
         gamma: discount factor
-
     Returns:
         loss and batch_weights
     """
@@ -111,9 +109,10 @@ def per_dqn_loss(batch: Tuple[torch.Tensor, torch.Tensor], batch_weights: List, 
 
     batch_weights = torch.tensor(batch_weights)
 
-    # state_action_vals = net(states).gather(1, actions)
-    # state_action_vals = state_action_vals.squeeze(-1)
-    state_action_vals = net(states).gather(1, actions)
+    actions_v = actions.unsqueeze(-1)
+    outputs = net(states)
+    state_action_vals = outputs.gather(1, actions_v)
+    state_action_vals = state_action_vals.squeeze(-1)
 
     with torch.no_grad():
         next_s_vals = target_net(next_states).max(1)[0]
